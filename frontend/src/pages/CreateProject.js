@@ -206,7 +206,7 @@ const CreateProject = () => {
             {EXAMPLE_IDEAS.map((idea, idx) => (
               <Card
                 key={idx}
-                onClick={() => useExample(idea)}
+                onClick={() => handleUseExample(idea)}
                 className="bg-neutral-900/40 border-white/10 hover:border-primary/30 p-3 cursor-pointer transition-all"
                 data-testid={`example-idea-${idx}`}
               >
