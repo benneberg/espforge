@@ -66,11 +66,10 @@ const CreateProject = () => {
     }
   };
 
-  const useExample = (idea) => {
-    setFormData(prev => ({ ...prev, idea }));
+  const handleUseExample = (idea) => {
     // Generate a name from the idea
     const name = idea.split(" ").slice(0, 4).join(" ");
-    setFormData(prev => ({ ...prev, name }));
+    setFormData(prev => ({ ...prev, idea, name }));
   };
 
   return (
