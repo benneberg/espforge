@@ -1,0 +1,156 @@
+{
+  "identity": {
+    "name": "E1",
+    "archetype": "Cyber-Industrial",
+    "vibe": "Technical, Precise, Empowering, 'Cyberpunk Workshop'",
+    "principles": [
+      "Fusion over Imitation: Mix Industrial Safety aesthetics with Cyberpunk UI",
+      "Emotion First: Feel like a powerful engineering tool",
+      "Content is King: The project plan is the hero",
+      "Zoom In: Focus on the code and wiring details",
+      "Negative Space: Don't clutter the workbench",
+      "Contrast: High visibility for safety and readability"
+    ]
+  },
+  "typography": {
+    "fonts": {
+      "headings": {
+        "family": "Azeret Mono",
+        "weights": ["400", "700"],
+        "usage": "Page titles, Section headers, Key metrics",
+        "import_url": "https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@400;700&display=swap"
+      },
+      "body": {
+        "family": "Manrope",
+        "weights": ["400", "500", "600"],
+        "usage": "General text, descriptions, instructions",
+        "import_url": "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600&display=swap"
+      },
+      "code": {
+        "family": "JetBrains Mono",
+        "weights": ["400"],
+        "usage": "Code blocks, terminal outputs, technical specs",
+        "import_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap"
+      }
+    },
+    "rules": [
+      "Headings must use 'tracking-tight'",
+      "Overlines/Labels must be Uppercase + 'tracking-widest' + 'text-xs'",
+      "Line height: 'leading-none' for headers, 'leading-relaxed' for body"
+    ]
+  },
+  "colors": {
+    "palette": {
+      "background": {
+        "default": "#050505",
+        "paper": "#0A0A0A",
+        "subtle": "#121212"
+      },
+      "primary": {
+        "main": "#F59E0B",
+        "light": "#FBBF24",
+        "dark": "#D97706",
+        "contrast": "#000000",
+        "description": "Electric Amber - Represents power, filaments, warning lights"
+      },
+      "secondary": {
+        "main": "#06B6D4",
+        "light": "#22D3EE",
+        "dark": "#0891B2",
+        "contrast": "#000000",
+        "description": "Cyan - Represents data flow, circuitry, signals"
+      },
+      "neutral": {
+        "50": "#FAFAFA",
+        "100": "#F4F4F5",
+        "200": "#E4E4E7",
+        "300": "#D4D4D8",
+        "400": "#A1A1AA",
+        "500": "#71717A",
+        "600": "#52525B",
+        "700": "#3F3F46",
+        "800": "#27272A",
+        "900": "#18181B",
+        "950": "#09090B"
+      },
+      "status": {
+        "success": "#10B981",
+        "error": "#EF4444",
+        "warning": "#F59E0B",
+        "info": "#3B82F6"
+      }
+    },
+    "usage_rules": [
+      "Backgrounds: Always use 'bg-neutral-950' or custom '#050505'",
+      "Cards: 'bg-neutral-900/50' with 'border-white/10'",
+      "Primary Action: 'bg-primary text-primary-foreground'",
+      "Text: 'text-neutral-100' for headings, 'text-neutral-400' for body",
+      "Borders: 'border-white/10' generally, 'border-primary/50' for active states"
+    ]
+  },
+  "layout": {
+    "spacing": {
+      "container_padding": "p-4 md:p-8",
+      "section_gap": "gap-8",
+      "item_gap": "gap-4"
+    },
+    "grid_system": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4",
+      "detail_view": "flex flex-col gap-6 max-w-3xl mx-auto"
+    },
+    "mobile_nav": {
+      "height": "h-16",
+      "position": "fixed bottom-0 left-0 right-0",
+      "style": "bg-neutral-950/80 backdrop-blur-xl border-t border-white/10 z-50"
+    }
+  },
+  "components": {
+    "buttons": {
+      "style": "rounded-sm font-medium transition-all active:scale-95",
+      "primary": "bg-primary text-black hover:bg-primary/90 shadow-[0_0_15px_rgba(245,158,11,0.3)]",
+      "secondary": "bg-neutral-800 text-white hover:bg-neutral-700 border border-white/10",
+      "ghost": "hover:bg-white/5 text-neutral-400 hover:text-white"
+    },
+    "cards": {
+      "style": "bg-neutral-900/40 border border-white/10 rounded-lg backdrop-blur-sm",
+      "hover": "hover:border-primary/30 transition-colors duration-300"
+    },
+    "inputs": {
+      "style": "bg-black/50 border-white/10 focus:border-primary/50 focus:ring-1 focus:ring-primary/50 rounded-sm font-mono text-sm"
+    },
+    "stepper": {
+      "container": "relative pl-8 border-l border-white/10 space-y-8",
+      "step_dot": "absolute -left-[5px] w-2.5 h-2.5 rounded-full bg-neutral-800 ring-4 ring-neutral-950",
+      "step_active": "bg-primary ring-primary/20 shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-black/60 border border-white/10",
+    "neon_glow": "shadow-[0_0_20px_rgba(245,158,11,0.15)]",
+    "scanlines": "bg-[linear-gradient(rgba(18,18,18,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))]",
+    "textures": "Use subtle noise overlay on the main background"
+  },
+  "image_urls": {
+    "hero_bg": "https://images.unsplash.com/photo-1536369212193-d7af891df5c5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwxfHxlc3AzMiUyMG1pY3JvY29udHJvbGxlciUyMGJvYXJkJTIwZWxlY3Ryb25pYyUyMGNvbXBvbmVudHN8ZW58MHx8fGJsYWNrX2FuZF93aGl0ZXwxNzY2NzAwNTQ0fDA&ixlib=rb-4.1.0&q=85",
+    "hardware_selection": "https://images.unsplash.com/photo-1553341640-6b28ff92098a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHxlbGVjdHJvbmljJTIwY2lyY3VpdCUyMHdpcmluZyUyMGJyZWFkYm9hcmQlMjBjbG9zZSUyMHVwfGVufDB8fHxibGFja19hbmRfd2hpdGV8MTc2NjcwMDU0Nnww&ixlib=rb-4.1.0&q=85",
+    "wiring_guide": "https://images.unsplash.com/photo-1535136104956-115a2cd67fc4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwzfHxlbGVjdHJvbmljJTIwY2lyY3VpdCUyMHdpcmluZyUyMGJyZWFkYm9hcmQlMjBjbG9zZSUyMHVwfGVufDB8fHxibGFja19hbmRfd2hpdGV8MTc2NjcwMDU0Nnww&ixlib=rb-4.1.0&q=85"
+  },
+  "instructions_to_main_agent": [
+    "1. INSTALL FONTS: Add the Google Fonts import links to the <head> of public/index.html or import in index.css.",
+    "2. CONFIGURE TAILWIND: Update tailwind.config.js with the 'Cyber-Industrial' colors and font families.",
+    "3. GLOBAL STYLES: Apply the dark background (#050505) and text color globally in index.css.",
+    "4. MOBILE NAV: Implement a fixed bottom navigation bar for mobile. Hide it on desktop if needed, or move to side.",
+    "5. PROJECT FLOW: The 7-stage workflow is the core. Use a vertical stepper or accordion layout.",
+    "6. CODE BLOCKS: Use a custom CodeBlock component with syntax highlighting and a 'Copy' button. Style it like a terminal.",
+    "7. SETTINGS: Add the API Key management and Theme Toggle here. Default to Dark Mode.",
+    "8. SHADCN: Customize all Shadcn components to remove the default 'radius' and 'border' styles. Make them sharper and darker.",
+    "9. DATA-TESTID: Add data-testid attributes to all interactive elements (buttons, inputs, links)."
+  ],
+  "universal_guidelines": [
+    "Avoid 'AI Slop': No generic gradients, no centered text everywhere.",
+    "Dark Mode First: The app is designed for dark mode. Light mode is secondary.",
+    "Micro-interactions: Add hover states to everything. Buttons should glow or lift.",
+    "Spacing: Use p-6 or p-8 inside cards. Don't cram content.",
+    "Accessibility: Ensure text contrast is high (Amber on Black is good, but check Grey on Black)."
+  ]
+}
