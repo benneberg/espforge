@@ -1,34 +1,76 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
+/* App-specific styles */
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
+/* Ensure proper mobile viewport */
+html, body, #root {
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+    min-height: -webkit-fill-available;
 }
 
-.App-link {
-    color: #61dafb;
+/* Safe area handling for mobile */
+.main-content {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+/* Bottom nav safe area */
+.bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Project card hover effect */
+.project-card {
+    transition: transform 0.2s ease, border-color 0.3s ease;
+}
+
+.project-card:hover {
+    transform: translateY(-2px);
+}
+
+.project-card:active {
+    transform: scale(0.98);
+}
+
+/* Stage connector line */
+.stage-connector {
+    position: absolute;
+    left: 5px;
+    top: 12px;
+    bottom: -28px;
+    width: 2px;
+    background: linear-gradient(to bottom, hsl(var(--primary)) 0%, hsl(var(--muted)) 100%);
+}
+
+/* Loading spinner */
+.loading-spinner {
+    border: 2px solid hsl(var(--muted));
+    border-top: 2px solid hsl(var(--primary));
+    border-radius: 50%;
+    width: 24px;
+    height: 24px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Copy button in code blocks */
+.copy-btn {
+    @apply absolute top-2 right-2 p-2 rounded bg-neutral-800/80 hover:bg-neutral-700 transition-colors;
+}
+
+/* Skeleton loading */
+.skeleton {
+    background: linear-gradient(90deg, 
+        hsl(var(--muted)) 25%, 
+        hsl(var(--accent)) 50%, 
+        hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
