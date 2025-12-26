@@ -82,14 +82,24 @@ Project {
 - [x] Expanded hardware library (20 components)
 - [x] Provider comparison section in Settings
 
-## Next Tasks (Phase 3)
-- [ ] Add wiring diagram generation (ASCII/SVG)
-- [ ] Implement code compilation check (Arduino CLI integration)
-- [ ] Add project templates/presets
+## Tasks Completed (Phase 3)
+- [x] ASCII Wiring Diagram Generator with deterministic pin mappings
+- [x] Pin conflict detection and warnings
+- [x] I2C/SPI/GPIO automatic pin assignment
+- [x] Power notes and wiring best practices
+- [x] Project Templates system (6 templates)
+- [x] Template instantiation API
+- [x] Templates page with difficulty badges
+- [x] Debug Assistant with 4 error types (compilation, runtime, hardware, power)
+- [x] LLM-powered error analysis and fix suggestions
+- [x] Updated bottom navigation (4 items)
+
+## Next Tasks (Phase 4)
+- [ ] Arduino CLI compilation check (Dockerized)
+- [ ] SVG wiring diagrams (optional visual enhancement)
+- [ ] Project sharing via URL
 - [ ] Mobile PWA support (offline caching, install prompt)
-- [ ] Add project sharing via URL
-- [ ] Implement project versioning/history
-- [ ] Add real-time collaboration
+- [ ] Project versioning/history
 
 ## API Endpoints
 - `GET /api/` - Health check
