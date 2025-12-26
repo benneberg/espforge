@@ -68,16 +68,28 @@ Project {
 - [x] Dark/light/system theme support
 - [x] Code block component with copy functionality
 
-## Next Tasks (Phase 2)
-- [ ] Implement Groq and OpenRouter provider backends
-- [ ] Add conversation history view in project detail
-- [ ] Implement code syntax highlighting (highlight.js or prism)
-- [ ] Add wiring diagram generation (ASCII/textual initially)
-- [ ] Add project export (PDF/markdown download)
-- [ ] Implement project search functionality
+## Tasks Completed (Phase 2)
+- [x] Groq provider backend integration with user API keys
+- [x] OpenRouter provider backend integration with user API keys
+- [x] Code syntax highlighting with react-syntax-highlighter (Prism)
+- [x] Project export to Markdown
+- [x] Project export to PDF (jsPDF)
+- [x] Project export to JSON
+- [x] Hardware shopping list generator
+- [x] Amazon shopping links for components
+- [x] AliExpress shopping links for components
+- [x] Price estimates for all components
+- [x] Expanded hardware library (20 components)
+- [x] Provider comparison section in Settings
+
+## Next Tasks (Phase 3)
+- [ ] Add wiring diagram generation (ASCII/SVG)
+- [ ] Implement code compilation check (Arduino CLI integration)
 - [ ] Add project templates/presets
 - [ ] Mobile PWA support (offline caching, install prompt)
-- [ ] Add hardware component shopping list generator
+- [ ] Add project sharing via URL
+- [ ] Implement project versioning/history
+- [ ] Add real-time collaboration
 
 ## API Endpoints
 - `GET /api/` - Health check
