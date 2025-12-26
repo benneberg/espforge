@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import ProjectDetail from "./pages/ProjectDetail";
 import Settings from "./pages/Settings";
 import CreateProject from "./pages/CreateProject";
+import Templates from "./pages/Templates";
 import BottomNav from "./components/BottomNav";
 import "./App.css";
 
@@ -17,6 +18,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/create" element={<CreateProject />} />
+              <Route path="/templates" element={<Templates />} />
               <Route path="/project/:id" element={<ProjectDetail />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
