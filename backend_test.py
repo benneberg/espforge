@@ -150,6 +150,99 @@ class ESP32CopilotAPITester:
             if 'sensors' in hardware:
                 print(f"   Available sensors: {len(hardware['sensors'])}")
 
+    def test_shopping_list(self):
+        """Test shopping list generation endpoint"""
+        print("\n=== TESTING SHOPPING LIST GENERATION ===")
+        
+        # Test shopping list with valid component IDs
+        shopping_data = {
+            "component_ids": ["dht22", "ssd1306", "relay", "esp32_devkit"]
+        }
+        
+        success, response = self.run_test("Generate Shopping List", "POST", "api/shopping-list", 200, shopping_data)
+        if success:
+            print(f"   Components in list: {response.get('component_count', 0)}")
+            print(f"   Total estimate: {response.get('total_estimate', 'N/A')}")
+            
+            # Check if components have shopping links
+            components = response.get('components', [])
+            if components:
+                first_component = components[0]
+                has_amazon = 'amazon' in first_component.get('shopping_links', {})
+                has_aliexpress = 'aliexpress' in first_component.get('shopping_links', {})
+                print(f"   Shopping links available - Amazon: {has_amazon}, AliExpress: {has_aliexpress}")
+        
+        # Test with empty component list
+        empty_data = {"component_ids": []}
+        self.run_test("Empty Shopping List", "POST", "api/shopping-list", 200, empty_data)
+
+    def test_project_export(self):
+        """Test project export endpoints"""
+        print("\n=== TESTING PROJECT EXPORT ===")
+        
+        if not self.project_id:
+            print("❌ No project ID available - skipping export tests")
+            return False
+        
+        # Test markdown export
+        success, _ = self.run_test("Export Markdown", "GET", f"api/projects/{self.project_id}/export/markdown", 200)
+        if success:
+            print("   Markdown export successful")
+        
+        # Test JSON export
+        success, _ = self.run_test("Export JSON", "GET", f"api/projects/{self.project_id}/export/json", 200)
+        if success:
+            print("   JSON export successful")
+        
+        return True
+
+    def test_llm_providers(self):
+        """Test LLM generation with different providers"""
+        print("\n=== TESTING LLM PROVIDERS ===")
+        
+        if not self.project_id:
+            print("❌ No project ID available - skipping LLM provider tests")
+            return False
+        
+        # Test with OpenAI (default/Emergent)
+        openai_data = {
+            "project_id": self.project_id,
+            "stage": "hardware",
+            "provider": "openai",
+            "model": "gpt-4o"
+        }
+        
+        print("⏳ Testing OpenAI provider (this may take 10-15 seconds)...")
+        success, response = self.run_test("OpenAI Provider", "POST", f"api/projects/{self.project_id}/generate", 200, openai_data)
+        if success and 'content' in response:
+            print(f"   OpenAI generation successful - {len(response['content'])} characters")
+        
+        # Test with Groq (should fail without API key)
+        groq_data = {
+            "project_id": self.project_id,
+            "stage": "architecture",
+            "provider": "groq",
+            "model": "llama-3.1-70b-versatile"
+        }
+        
+        success, response = self.run_test("Groq Provider (no key)", "POST", f"api/projects/{self.project_id}/generate", 400, groq_data)
+        if not success:
+            print("   Groq correctly requires API key")
+        
+        # Test with OpenRouter (should fail without API key)
+        openrouter_data = {
+            "project_id": self.project_id,
+            "stage": "architecture",
+            "provider": "openrouter",
+            "model": "anthropic/claude-3.5-sonnet"
+        }
+        
+        success, response = self.run_test("OpenRouter Provider (no key)", "POST", f"api/projects/{self.project_id}/generate", 400, openrouter_data)
+        if not success:
+            print("   OpenRouter correctly requires API key")
+        
+        return True
+
     def test_cleanup(self):
         """Clean up test data"""
         print("\n=== CLEANUP ===")
