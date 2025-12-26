@@ -113,6 +113,9 @@ const ShoppingList = ({ projectId, onComponentsSelected }) => {
             <Package className="text-primary" size={20} />
             Hardware Shopping List Generator
           </DialogTitle>
+          <p className="text-sm text-neutral-400">
+            Select components and get shopping links
+          </p>
         </DialogHeader>
 
         {!shoppingList ? (
