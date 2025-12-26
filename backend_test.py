@@ -243,6 +243,206 @@ class ESP32CopilotAPITester:
         
         return True
 
+    def test_wiring_diagram(self):
+        """Test ASCII wiring diagram generation"""
+        print("\n=== TESTING WIRING DIAGRAM GENERATION ===")
+        
+        # Test wiring diagram with valid components
+        wiring_data = {
+            "component_ids": ["dht22", "ssd1306", "relay", "esp32_devkit"]
+        }
+        
+        success, response = self.run_test("Generate Wiring Diagram", "POST", "api/wiring-diagram", 200, wiring_data)
+        if success:
+            diagram = response.get('diagram', '')
+            warnings = response.get('warnings', [])
+            pin_assignments = response.get('pin_assignments', {})
+            components = response.get('components', [])
+            
+            print(f"   Diagram length: {len(diagram)} characters")
+            print(f"   Components: {len(components)}")
+            print(f"   Pin assignments: {len(pin_assignments)} components")
+            print(f"   Warnings: {len(warnings)}")
+            
+            # Check for deterministic pin mappings
+            if 'GPIO21' in diagram and 'GPIO22' in diagram:
+                print("   ✅ I2C pins (GPIO21/22) correctly assigned")
+            
+            if 'ESP32 WIRING DIAGRAM' in diagram:
+                print("   ✅ ASCII diagram header present")
+        
+        # Test with empty component list
+        empty_data = {"component_ids": []}
+        success, response = self.run_test("Empty Wiring Diagram", "POST", "api/wiring-diagram", 200, empty_data)
+        if success and 'No components selected' in response.get('diagram', ''):
+            print("   ✅ Empty component list handled correctly")
+        
+        # Test with conflicting components (multiple I2C devices)
+        conflict_data = {
+            "component_ids": ["bme280", "ssd1306", "lcd1602_i2c"]
+        }
+        success, response = self.run_test("Conflicting Components", "POST", "api/wiring-diagram", 200, conflict_data)
+        if success:
+            warnings = response.get('warnings', [])
+            if any('conflict' in w.lower() for w in warnings):
+                print("   ✅ Pin conflicts detected and warned")
+
+    def test_project_templates(self):
+        """Test project templates functionality"""
+        print("\n=== TESTING PROJECT TEMPLATES ===")
+        
+        # Test get all templates
+        success, templates = self.run_test("Get All Templates", "GET", "api/templates", 200)
+        if success:
+            print(f"   Available templates: {len(templates)}")
+            
+            # Check for expected templates
+            template_ids = [t.get('id') for t in templates]
+            expected_templates = ["temperature_logger", "oled_sensor_display", "relay_controller", 
+                                "battery_sensor_node", "motion_alarm", "plant_monitor"]
+            
+            found_templates = [tid for tid in expected_templates if tid in template_ids]
+            print(f"   Expected templates found: {len(found_templates)}/6")
+            
+            # Check template structure
+            if templates:
+                first_template = templates[0]
+                required_fields = ['id', 'name', 'description', 'difficulty', 'components', 'idea']
+                has_all_fields = all(field in first_template for field in required_fields)
+                print(f"   Template structure complete: {has_all_fields}")
+                
+                # Check difficulty levels
+                difficulties = set(t.get('difficulty') for t in templates)
+                print(f"   Difficulty levels: {sorted(difficulties)}")
+        
+        # Test get specific template
+        if templates:
+            template_id = templates[0]['id']
+            success, template = self.run_test("Get Specific Template", "GET", f"api/templates/{template_id}", 200)
+            if success:
+                print(f"   Template '{template.get('name')}' retrieved successfully")
+        
+        # Test template instantiation
+        if templates:
+            template_id = templates[0]['id']
+            success, project = self.run_test("Instantiate Template", "POST", f"api/templates/{template_id}/instantiate", 200)
+            if success and 'id' in project:
+                print(f"   Template instantiated as project: {project['id']}")
+                # Store for cleanup
+                self.template_project_id = project['id']
+                
+                # Verify project has template data
+                if project.get('name') == templates[0].get('name'):
+                    print("   ✅ Project created with template name")
+                if project.get('idea') == templates[0].get('idea'):
+                    print("   ✅ Project created with template idea")
+        
+        # Test non-existent template
+        self.run_test("Non-existent Template", "GET", "api/templates/nonexistent", 404)
+
+    def test_debug_assistant(self):
+        """Test debug assistance functionality"""
+        print("\n=== TESTING DEBUG ASSISTANT ===")
+        
+        if not self.project_id:
+            print("❌ No project ID available - skipping debug tests")
+            return False
+        
+        # Test compilation error analysis
+        compilation_data = {
+            "project_id": self.project_id,
+            "error_type": "compilation",
+            "log_content": """
+Arduino: 1.8.19 (Windows 10), Board: "ESP32 Dev Module, Disabled, Default 4MB with spiffs, 240MHz (WiFi/BT), QIO, 80MHz, 4MB (32Kb SPIFFS), None, Core 1, Core 1"
+
+sketch_jan01a:5:1: error: 'WiFi' was not declared in this scope
+ WiFi.begin(ssid, password);
+ ^~~~
+sketch_jan01a:5:1: note: suggested alternative: 'wifi'
+ WiFi.begin(ssid, password);
+ ^~~~
+ wifi
+
+exit status 1
+'WiFi' was not declared in this scope
+            """,
+            "provider": "openai",
+            "model": "gpt-4o"
+        }
+        
+        print("⏳ Analyzing compilation error (this may take 10-15 seconds)...")
+        success, response = self.run_test("Debug Compilation Error", "POST", "api/debug", 200, compilation_data)
+        if success:
+            analysis = response.get('analysis', '')
+            error_type = response.get('error_type', '')
+            print(f"   Analysis length: {len(analysis)} characters")
+            print(f"   Error type: {error_type}")
+            
+            # Check for key debugging elements
+            if 'WiFi.h' in analysis or '#include' in analysis:
+                print("   ✅ Analysis mentions missing include")
+            if 'library' in analysis.lower():
+                print("   ✅ Analysis mentions library issue")
+        
+        # Test runtime error analysis
+        runtime_data = {
+            "project_id": self.project_id,
+            "error_type": "runtime",
+            "log_content": """
+Guru Meditation Error: Core  1 panic'ed (LoadProhibited). Exception was unhandled.
+
+Core  1 register dump:
+PC      : 0x400d1b1c  PS      : 0x00060030  A0      : 0x800d1b3c  A1      : 0x3ffb1f50  
+A2      : 0x00000000  A3      : 0x3ffb1f7c  A4      : 0x00000001  A5      : 0x3ffb1f7c  
+
+Backtrace:0x400d1b19:0x3ffb1f50 0x400d1b39:0x3ffb1f70 0x400d62ed:0x3ffb1f90
+
+ELF file SHA256: 0000000000000000
+
+Rebooting...
+            """,
+            "provider": "openai"
+        }
+        
+        print("⏳ Analyzing runtime error (this may take 10-15 seconds)...")
+        success, response = self.run_test("Debug Runtime Error", "POST", "api/debug", 200, runtime_data)
+        if success:
+            analysis = response.get('analysis', '')
+            if 'null pointer' in analysis.lower() or 'memory' in analysis.lower():
+                print("   ✅ Analysis identifies memory/pointer issue")
+        
+        # Test hardware issue analysis
+        hardware_data = {
+            "project_id": self.project_id,
+            "error_type": "hardware",
+            "log_content": "DHT22 sensor always returns NaN values. Wiring: VCC to 3.3V, GND to GND, DATA to GPIO4 with 10K pullup resistor. Serial output shows: Temperature: nan°C, Humidity: nan%",
+            "provider": "openai"
+        }
+        
+        print("⏳ Analyzing hardware issue (this may take 10-15 seconds)...")
+        success, response = self.run_test("Debug Hardware Issue", "POST", "api/debug", 200, hardware_data)
+        if success:
+            analysis = response.get('analysis', '')
+            if 'wiring' in analysis.lower() or 'power' in analysis.lower():
+                print("   ✅ Analysis addresses hardware/wiring")
+        
+        # Test power issue analysis
+        power_data = {
+            "project_id": self.project_id,
+            "error_type": "power",
+            "log_content": "ESP32 keeps rebooting when relay activates. Serial shows: Brownout detector was triggered. Using USB power supply.",
+            "provider": "openai"
+        }
+        
+        print("⏳ Analyzing power issue (this may take 10-15 seconds)...")
+        success, response = self.run_test("Debug Power Issue", "POST", "api/debug", 200, power_data)
+        if success:
+            analysis = response.get('analysis', '')
+            if 'power supply' in analysis.lower() or 'current' in analysis.lower():
+                print("   ✅ Analysis addresses power supply")
+        
+        return True
+
     def test_cleanup(self):
         """Clean up test data"""
         print("\n=== CLEANUP ===")
@@ -251,9 +451,15 @@ class ESP32CopilotAPITester:
             success, _ = self.run_test("Delete Test Project", "DELETE", f"api/projects/{self.project_id}", 200)
             if success:
                 print(f"   Cleaned up project {self.project_id}")
+        
+        # Clean up template project if created
+        if hasattr(self, 'template_project_id') and self.template_project_id:
+            success, _ = self.run_test("Delete Template Project", "DELETE", f"api/projects/{self.template_project_id}", 200)
+            if success:
+                print(f"   Cleaned up template project {self.template_project_id}")
 
 def main():
-    print("🚀 Starting ESP32 IoT Copilot API Tests")
+    print("🚀 Starting ESP32 IoT Copilot API Tests - Phase 3")
     print("=" * 50)
     
     tester = ESP32CopilotAPITester()
@@ -265,9 +471,12 @@ def main():
         tester.test_stage_management()
         tester.test_llm_providers()
         tester.test_project_export()
+        tester.test_debug_assistant()
     
     tester.test_hardware_library()
     tester.test_shopping_list()
+    tester.test_wiring_diagram()
+    tester.test_project_templates()
     tester.test_cleanup()
     
     # Print results
