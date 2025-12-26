@@ -35,6 +35,8 @@ import {
 import StageContent from "../components/StageContent";
 import ShoppingList from "../components/ShoppingList";
 import ProjectExport from "../components/ProjectExport";
+import WiringDiagram from "../components/WiringDiagram";
+import DebugAssistant from "../components/DebugAssistant";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
