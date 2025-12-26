@@ -115,3 +115,8 @@ Project {
 - `GET /api/projects/:id/export/json` - Export project as JSON
 - `GET /api/hardware` - Get hardware library
 - `POST /api/shopping-list` - Generate shopping list with links
+- `POST /api/wiring-diagram` - Generate ASCII wiring diagram
+- `GET /api/templates` - Get all project templates
+- `GET /api/templates/:id` - Get specific template
+- `POST /api/templates/:id/instantiate` - Create project from template
+- `POST /api/debug` - Debug assistance (analyze errors)
