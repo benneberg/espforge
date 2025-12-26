@@ -306,8 +306,10 @@ const ProjectDetail = () => {
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <ProjectExport project={project} />
+            <WiringDiagram componentIds={project.selected_components || []} />
+            <DebugAssistant projectId={project.id} />
             <ShoppingList 
               projectId={project.id} 
               onComponentsSelected={handleComponentsSelected}
