@@ -1129,6 +1129,358 @@ async def export_project_json(project_id: str):
         }
     )
 
+# ================== WIRING DIAGRAM GENERATOR ==================
+
+def generate_ascii_wiring_diagram(component_ids: List[str]) -> dict:
+    """Generate deterministic ASCII wiring diagram for selected components"""
+    all_components = []
+    for category in HARDWARE_LIBRARY.values():
+        all_components.extend(category)
+    
+    selected = [c for c in all_components if c["id"] in component_ids]
+    
+    if not selected:
+        return {"diagram": "No components selected", "warnings": [], "pin_assignments": {}}
+    
+    # Track used pins to detect conflicts
+    used_pins = {}
+    warnings = []
+    pin_assignments = {}
+    diagram_lines = []
+    
+    # Header
+    diagram_lines.append("=" * 60)
+    diagram_lines.append("ESP32 WIRING DIAGRAM")
+    diagram_lines.append("=" * 60)
+    diagram_lines.append("")
+    
+    # GPIO assignment counter for generic digital pins
+    next_gpio_idx = 0
+    gpio_pool = ESP32_PIN_MAP["digital_recommended"].copy()
+    
+    for component in selected:
+        comp_id = component["id"]
+        comp_name = component["name"]
+        interface = component.get("interface", "")
+        wiring = component.get("wiring", {})
+        
+        if not wiring:
+            continue
+        
+        diagram_lines.append(f"ESP32                    {comp_name}")
+        diagram_lines.append("-" * 50)
+        
+        comp_pins = {}
+        
+        for pin_name, pin_desc in wiring.items():
+            assigned_pin = None
+            
+            # Power pins
+            if pin_name.upper() in ["VCC", "VIN"]:
+                if "3.3" in str(pin_desc):
+                    assigned_pin = "3.3V"
+                else:
+                    assigned_pin = "5V (VIN)"
+            elif pin_name.upper() == "GND":
+                assigned_pin = "GND"
+            
+            # I2C pins
+            elif pin_name.upper() in ["SDA", "SDL"]:
+                assigned_pin = ESP32_PIN_MAP["i2c"]["SDA"]
+            elif pin_name.upper() == "SCL":
+                assigned_pin = ESP32_PIN_MAP["i2c"]["SCL"]
+            
+            # SPI pins
+            elif pin_name.upper() in ["MOSI", "SDI", "DIN"]:
+                assigned_pin = ESP32_PIN_MAP["spi_vspi"]["MOSI"]
+            elif pin_name.upper() in ["MISO", "SDO", "DOUT"]:
+                assigned_pin = ESP32_PIN_MAP["spi_vspi"]["MISO"]
+            elif pin_name.upper() in ["SCK", "CLK", "SCLK"]:
+                assigned_pin = ESP32_PIN_MAP["spi_vspi"]["SCK"]
+            elif pin_name.upper() == "CS":
+                assigned_pin = ESP32_PIN_MAP["spi_vspi"]["CS"]
+            
+            # ADC pins (analog sensors)
+            elif pin_name.upper() in ["AOUT", "AO", "ANALOG"]:
+                # Use ADC1 pins (safe with WiFi)
+                for adc_pin in ESP32_PIN_MAP["adc1"]:
+                    if adc_pin not in used_pins:
+                        assigned_pin = adc_pin
+                        break
+                if not assigned_pin:
+                    assigned_pin = "GPIO34 (ADC)"
+                    warnings.append(f"{comp_name}: ADC pins limited, may conflict")
+            
+            # Generic digital pins (DATA, IN, OUT, SIGNAL, etc.)
+            elif pin_name.upper() in ["DATA", "IN", "OUT", "SIGNAL", "DQ", "IO", "IN1", "IN2", "IN3", "IN4"]:
+                # Get next available GPIO from pool
+                while next_gpio_idx < len(gpio_pool):
+                    candidate = gpio_pool[next_gpio_idx]
+                    next_gpio_idx += 1
+                    if candidate not in used_pins.values():
+                        assigned_pin = candidate
+                        break
+                if not assigned_pin:
+                    assigned_pin = f"GPIO{4 + next_gpio_idx}"
+                    warnings.append(f"{comp_name}: Running low on recommended GPIOs")
+            
+            # Display/control pins
+            elif pin_name.upper() in ["DC", "RS"]:
+                assigned_pin = "GPIO2"
+            elif pin_name.upper() in ["RES", "RST", "RESET"]:
+                assigned_pin = "GPIO4"
+            
+            # Fallback
+            else:
+                assigned_pin = pin_desc
+            
+            if assigned_pin and assigned_pin not in ["GND", "3.3V", "5V (VIN)"]:
+                # Check for conflicts
+                if assigned_pin in used_pins and used_pins[assigned_pin] != comp_id:
+                    warnings.append(f"PIN CONFLICT: {assigned_pin} used by both {used_pins[assigned_pin]} and {comp_name}")
+                used_pins[assigned_pin] = comp_id
+            
+            comp_pins[pin_name] = assigned_pin
+            
+            # Format diagram line
+            arrow = "-------->"
+            note = ""
+            if "pull-up" in str(pin_desc).lower():
+                note = " [10K pull-up]"
+            elif "pull-down" in str(pin_desc).lower():
+                note = " [10K pull-down]"
+            
+            diagram_lines.append(f"{assigned_pin:20} {arrow} {pin_name}{note}")
+        
+        pin_assignments[comp_id] = comp_pins
+        diagram_lines.append("")
+    
+    # Add notes section
+    if any(c.get("notes") for c in selected):
+        diagram_lines.append("=" * 60)
+        diagram_lines.append("WIRING NOTES")
+        diagram_lines.append("=" * 60)
+        for component in selected:
+            if component.get("notes"):
+                diagram_lines.append(f"• {component['name']}: {component['notes']}")
+        diagram_lines.append("")
+    
+    # Add warnings
+    if warnings:
+        diagram_lines.append("=" * 60)
+        diagram_lines.append("⚠️  WARNINGS")
+        diagram_lines.append("=" * 60)
+        for warning in warnings:
+            diagram_lines.append(f"• {warning}")
+        diagram_lines.append("")
+    
+    # Add power notes
+    diagram_lines.append("=" * 60)
+    diagram_lines.append("POWER NOTES")
+    diagram_lines.append("=" * 60)
+    diagram_lines.append("• ESP32 3.3V pin can supply ~50mA max")
+    diagram_lines.append("• For 5V components, use VIN or external supply")
+    diagram_lines.append("• Relays/motors need external power supply")
+    diagram_lines.append("• Add 100µF capacitor near sensor VCC for stability")
+    
+    return {
+        "diagram": "\n".join(diagram_lines),
+        "warnings": warnings,
+        "pin_assignments": pin_assignments,
+        "components": [{"id": c["id"], "name": c["name"]} for c in selected]
+    }
+
+@api_router.post("/wiring-diagram")
+async def generate_wiring_diagram(request: WiringDiagramRequest):
+    """Generate ASCII wiring diagram for selected components"""
+    return generate_ascii_wiring_diagram(request.component_ids)
+
+# ================== PROJECT TEMPLATES ==================
+
+@api_router.get("/templates")
+async def get_project_templates():
+    """Get all available project templates"""
+    return PROJECT_TEMPLATES
+
+@api_router.get("/templates/{template_id}")
+async def get_template(template_id: str):
+    """Get a specific template by ID"""
+    template = next((t for t in PROJECT_TEMPLATES if t["id"] == template_id), None)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return template
+
+@api_router.post("/templates/{template_id}/instantiate")
+async def instantiate_template(template_id: str):
+    """Create a new project from a template"""
+    template = next((t for t in PROJECT_TEMPLATES if t["id"] == template_id), None)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    project = Project(
+        name=template["name"],
+        idea=template["idea"],
+        description=template["description"],
+        target_hardware="ESP32 DevKit V1",
+        selected_components=template.get("components", [])
+    )
+    project.stages["idea"] = StageData(
+        content=template["idea"],
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        user_approved=True
+    )
+    
+    doc = project.model_dump()
+    await db.projects.insert_one(doc)
+    return project
+
+# ================== DEBUG ASSISTANCE ==================
+
+@api_router.post("/debug")
+async def debug_assistance(request: DebugRequest):
+    """Analyze error logs and provide debugging assistance"""
+    project = await db.projects.find_one({"id": request.project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    error_type_prompts = {
+        "compilation": """You are an ESP32/Arduino compilation error expert. Analyze the following compiler error and provide:
+
+## Error Classification
+- Type of error (syntax, missing library, type mismatch, etc.)
+
+## Root Cause
+- Exact cause of the error
+- Line/file if identifiable
+
+## Solution
+- Step-by-step fix instructions
+- Corrected code snippet if applicable
+
+## Prevention
+- How to avoid this error in future
+
+Be specific and actionable. Reference Arduino/ESP32 conventions.""",
+
+        "runtime": """You are an ESP32 runtime debugging expert. Analyze the following runtime error/crash and provide:
+
+## Error Classification  
+- Type (crash, exception, watchdog, memory, etc.)
+
+## Root Cause Analysis
+- What caused this behavior
+- Memory address analysis if applicable
+
+## Solution
+- Debugging steps
+- Code fixes if identifiable
+
+## Prevention
+- Best practices to avoid this issue
+
+Focus on ESP32-specific runtime behaviors.""",
+
+        "hardware": """You are an ESP32 hardware debugging expert. Analyze the following hardware-related issue and provide:
+
+## Problem Classification
+- Type (wiring, power, signal, component failure)
+
+## Diagnostic Steps
+- How to verify the issue
+- Measurements to take
+
+## Solution
+- Wiring corrections
+- Component checks
+- Code verification
+
+## Common Causes
+- Similar issues and their solutions
+
+Focus on practical, hands-on debugging.""",
+
+        "power": """You are an ESP32 power management expert. Analyze the following power-related issue and provide:
+
+## Problem Classification
+- Type (brownout, insufficient current, voltage drop, sleep issue)
+
+## Root Cause
+- Power budget analysis
+- Supply adequacy
+
+## Solution
+- Power supply recommendations
+- Circuit modifications
+- Code changes for power optimization
+
+## Best Practices
+- Power management tips for this configuration"""
+    }
+    
+    system_prompt = error_type_prompts.get(request.error_type, error_type_prompts["runtime"])
+    
+    # Build context
+    context_parts = [
+        f"Project: {project['name']}",
+        f"Hardware: {project.get('target_hardware', 'ESP32')}",
+        f"Idea: {project['idea']}"
+    ]
+    
+    # Add code if available
+    code_stage = project.get("stages", {}).get("code", {})
+    if code_stage.get("content"):
+        context_parts.append(f"\nGenerated Code:\n```\n{code_stage['content'][:2000]}...\n```")
+    
+    # Add hardware info
+    hardware_stage = project.get("stages", {}).get("hardware", {})
+    if hardware_stage.get("content"):
+        context_parts.append(f"\nHardware Configuration:\n{hardware_stage['content'][:1000]}")
+    
+    context = "\n".join(context_parts)
+    
+    full_message = f"""Project Context:
+{context}
+
+Error Type: {request.error_type}
+
+Log/Error Content:
+```
+{request.log_content}
+```
+
+Please analyze this {request.error_type} issue and provide debugging assistance."""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": full_message}
+    ]
+    
+    try:
+        # Route to appropriate provider
+        if request.provider == LLMProvider.GROQ:
+            if not request.api_key:
+                raise HTTPException(status_code=400, detail="Groq API key required")
+            model = request.model or "llama-3.1-70b-versatile"
+            response = await call_groq_api(messages, model, request.api_key)
+        elif request.provider == LLMProvider.OPENROUTER:
+            if not request.api_key:
+                raise HTTPException(status_code=400, detail="OpenRouter API key required")
+            model = request.model or "anthropic/claude-3.5-sonnet"
+            response = await call_openrouter_api(messages, model, request.api_key)
+        else:
+            model = request.model or "gpt-4o"
+            response = await call_emergent_api(messages, model)
+        
+        return {
+            "analysis": response,
+            "error_type": request.error_type,
+            "project_id": request.project_id
+        }
+    
+    except Exception as e:
+        logger.error(f"Debug analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
 # Include the router in the main app
 app.include_router(api_router)
 
