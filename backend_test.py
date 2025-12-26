@@ -263,8 +263,11 @@ def main():
     
     if tester.test_project_crud():
         tester.test_stage_management()
+        tester.test_llm_providers()
+        tester.test_project_export()
     
     tester.test_hardware_library()
+    tester.test_shopping_list()
     tester.test_cleanup()
     
     # Print results
