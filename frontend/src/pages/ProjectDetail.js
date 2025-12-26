@@ -33,6 +33,8 @@ import {
   AlertDialogTitle,
 } from "../components/ui/alert-dialog";
 import StageContent from "../components/StageContent";
+import ShoppingList from "../components/ShoppingList";
+import ProjectExport from "../components/ProjectExport";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -56,6 +58,17 @@ const ProjectDetail = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState("");
 
+  // Get LLM settings from localStorage
+  const getSettings = () => {
+    const stored = localStorage.getItem("esp32-copilot-settings");
+    return stored ? JSON.parse(stored) : {
+      provider: "openai",
+      model: "gpt-4o",
+      groqKey: "",
+      openrouterKey: "",
+    };
+  };
+
   const fetchProject = async () => {
     try {
       const response = await axios.get(`${API}/projects/${id}`);
@@ -77,11 +90,25 @@ const ProjectDetail = () => {
   const handleGenerate = async (stage, userMessage = null) => {
     setGeneratingStage(stage);
     try {
-      const response = await axios.post(`${API}/projects/${id}/generate`, {
+      const settings = getSettings();
+      
+      // Build request with provider settings
+      const requestData = {
         project_id: id,
         stage: stage,
         user_message: userMessage,
-      });
+        provider: settings.provider,
+        model: settings.model,
+      };
+
+      // Add API key if needed
+      if (settings.provider === "groq" && settings.groqKey) {
+        requestData.api_key = settings.groqKey;
+      } else if (settings.provider === "openrouter" && settings.openrouterKey) {
+        requestData.api_key = settings.openrouterKey;
+      }
+
+      const response = await axios.post(`${API}/projects/${id}/generate`, requestData);
       
       // Update local state
       setProject(prev => ({
@@ -99,7 +126,8 @@ const ProjectDetail = () => {
       toast.success(`${stage} generated successfully!`);
     } catch (err) {
       console.error("Generation failed:", err);
-      toast.error("Generation failed. Please try again.");
+      const errorMsg = err.response?.data?.detail || "Generation failed. Please try again.";
+      toast.error(errorMsg);
     } finally {
       setGeneratingStage(null);
     }
@@ -173,6 +201,15 @@ const ProjectDetail = () => {
     }
   };
 
+  const handleComponentsSelected = async (componentIds) => {
+    try {
+      await axios.patch(`${API}/projects/${id}`, { selected_components: componentIds });
+      setProject(prev => ({ ...prev, selected_components: componentIds }));
+    } catch (err) {
+      console.error("Failed to save selected components:", err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen p-4 md:p-8 flex items-center justify-center">
@@ -186,6 +223,7 @@ const ProjectDetail = () => {
   }
 
   const currentStageIdx = STAGES.findIndex(s => s.key === project.current_stage);
+  const settings = getSettings();
 
   return (
     <div className="min-h-screen p-4 md:p-8" data-testid="project-detail">
@@ -238,7 +276,7 @@ const ProjectDetail = () => {
               {project.idea}
             </p>
             
-            <div className="flex items-center gap-2 mt-3">
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
               <Badge 
                 variant="outline" 
                 className="bg-neutral-800/50 border-neutral-700 text-neutral-300"
@@ -257,58 +295,71 @@ const ProjectDetail = () => {
               >
                 {project.status}
               </Badge>
+              <Badge 
+                variant="outline"
+                className="bg-secondary/10 text-secondary border-secondary/30 text-xs"
+              >
+                {settings.provider === "openai" ? "OpenAI" : settings.provider === "groq" ? "Groq" : "OpenRouter"}
+              </Badge>
             </div>
           </div>
           
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                data-testid="project-menu"
-              >
-                <MoreVertical size={18} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => setIsEditing(true)}>
-                <Edit2 size={14} className="mr-2" />
-                Rename
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={fetchProject}>
-                <RefreshCw size={14} className="mr-2" />
-                Refresh
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {project.status !== 'completed' && (
-                <DropdownMenuItem onClick={() => handleStatusChange('completed')}>
-                  <CheckCircle size={14} className="mr-2" />
-                  Mark Complete
+          <div className="flex items-center gap-2">
+            <ProjectExport project={project} />
+            <ShoppingList 
+              projectId={project.id} 
+              onComponentsSelected={handleComponentsSelected}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  data-testid="project-menu"
+                >
+                  <MoreVertical size={18} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setIsEditing(true)}>
+                  <Edit2 size={14} className="mr-2" />
+                  Rename
                 </DropdownMenuItem>
-              )}
-              {project.status !== 'archived' && (
-                <DropdownMenuItem onClick={() => handleStatusChange('archived')}>
-                  <Archive size={14} className="mr-2" />
-                  Archive
-                </DropdownMenuItem>
-              )}
-              {project.status === 'archived' && (
-                <DropdownMenuItem onClick={() => handleStatusChange('active')}>
+                <DropdownMenuItem onClick={fetchProject}>
                   <RefreshCw size={14} className="mr-2" />
-                  Reactivate
+                  Refresh
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={() => setDeleteDialogOpen(true)}
-                className="text-red-400 focus:text-red-400"
-                data-testid="delete-project-menu"
-              >
-                <Trash2 size={14} className="mr-2" />
-                Delete Project
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                <DropdownMenuSeparator />
+                {project.status !== 'completed' && (
+                  <DropdownMenuItem onClick={() => handleStatusChange('completed')}>
+                    <CheckCircle size={14} className="mr-2" />
+                    Mark Complete
+                  </DropdownMenuItem>
+                )}
+                {project.status !== 'archived' && (
+                  <DropdownMenuItem onClick={() => handleStatusChange('archived')}>
+                    <Archive size={14} className="mr-2" />
+                    Archive
+                  </DropdownMenuItem>
+                )}
+                {project.status === 'archived' && (
+                  <DropdownMenuItem onClick={() => handleStatusChange('active')}>
+                    <RefreshCw size={14} className="mr-2" />
+                    Reactivate
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem 
+                  onClick={() => setDeleteDialogOpen(true)}
+                  className="text-red-400 focus:text-red-400"
+                  data-testid="delete-project-menu"
+                >
+                  <Trash2 size={14} className="mr-2" />
+                  Delete Project
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
 
