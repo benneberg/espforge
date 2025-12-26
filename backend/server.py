@@ -1,5 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Header
+from fastapi.responses import StreamingResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -11,8 +11,8 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-import asyncio
 import json
+import httpx
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -51,6 +51,11 @@ class ProjectStatus(str, Enum):
     ARCHIVED = "archived"
     COMPLETED = "completed"
 
+class LLMProvider(str, Enum):
+    OPENAI = "openai"
+    GROQ = "groq"
+    OPENROUTER = "openrouter"
+
 # ================== MODELS ==================
 
 class StageData(BaseModel):
@@ -78,6 +83,7 @@ class Project(BaseModel):
         "explanation": StageData(),
         "iteration": StageData()
     })
+    selected_components: List[str] = Field(default_factory=list)
     conversation_history: List[Dict[str, str]] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -93,6 +99,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     target_hardware: Optional[str] = None
     status: Optional[ProjectStatus] = None
+    selected_components: Optional[List[str]] = None
 
 class StageApproval(BaseModel):
     stage: ProjectStage
@@ -103,19 +110,14 @@ class LLMRequest(BaseModel):
     project_id: str
     stage: ProjectStage
     user_message: Optional[str] = None
-
-class LLMProvider(str, Enum):
-    OPENAI = "openai"
-    GROQ = "groq"
-    OPENROUTER = "openrouter"
-
-class SettingsModel(BaseModel):
     provider: LLMProvider = LLMProvider.OPENAI
-    model: str = "gpt-4o"
+    model: Optional[str] = None
     api_key: Optional[str] = None
-    theme: str = "system"
 
-# ================== HARDWARE LIBRARY ==================
+class ShoppingListRequest(BaseModel):
+    component_ids: List[str]
+
+# ================== HARDWARE LIBRARY WITH SHOPPING LINKS ==================
 
 HARDWARE_LIBRARY = {
     "sensors": [
@@ -125,12 +127,17 @@ HARDWARE_LIBRARY = {
             "type": "Temperature & Humidity",
             "interface": "Digital (OneWire-like)",
             "library": "DHT sensor library",
+            "price_estimate": "$3-8",
             "wiring": {
                 "VCC": "3.3V or 5V",
                 "GND": "GND",
                 "DATA": "GPIO (with 10K pull-up)"
             },
-            "notes": "Use 10K pull-up resistor between DATA and VCC"
+            "notes": "Use 10K pull-up resistor between DATA and VCC",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=DHT22+sensor+module",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=DHT22+sensor+module"
+            }
         },
         {
             "id": "dht11",
@@ -138,12 +145,17 @@ HARDWARE_LIBRARY = {
             "type": "Temperature & Humidity",
             "interface": "Digital",
             "library": "DHT sensor library",
+            "price_estimate": "$1-3",
             "wiring": {
                 "VCC": "3.3V or 5V",
                 "GND": "GND",
                 "DATA": "GPIO (with 10K pull-up)"
             },
-            "notes": "Lower precision than DHT22, but cheaper"
+            "notes": "Lower precision than DHT22, but cheaper",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=DHT11+sensor+module",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=DHT11+sensor+module"
+            }
         },
         {
             "id": "bme280",
@@ -151,13 +163,18 @@ HARDWARE_LIBRARY = {
             "type": "Temperature, Humidity, Pressure",
             "interface": "I2C / SPI",
             "library": "Adafruit BME280 Library",
+            "price_estimate": "$5-12",
             "wiring": {
                 "VCC": "3.3V",
                 "GND": "GND",
                 "SDA": "GPIO21",
                 "SCL": "GPIO22"
             },
-            "notes": "Default I2C address: 0x76 or 0x77"
+            "notes": "Default I2C address: 0x76 or 0x77",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=BME280+sensor+module",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=BME280+sensor+module"
+            }
         },
         {
             "id": "ds18b20",
@@ -165,73 +182,379 @@ HARDWARE_LIBRARY = {
             "type": "Temperature (Waterproof)",
             "interface": "OneWire",
             "library": "OneWire + DallasTemperature",
+            "price_estimate": "$2-5",
             "wiring": {
                 "VCC": "3.3V or 5V",
                 "GND": "GND",
                 "DATA": "GPIO (with 4.7K pull-up)"
             },
-            "notes": "Can chain multiple sensors on same bus"
+            "notes": "Can chain multiple sensors on same bus",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=DS18B20+waterproof+sensor",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=DS18B20+waterproof+temperature"
+            }
+        },
+        {
+            "id": "soil_moisture",
+            "name": "Capacitive Soil Moisture Sensor",
+            "type": "Soil Moisture",
+            "interface": "Analog",
+            "library": "None (analogRead)",
+            "price_estimate": "$2-5",
+            "wiring": {
+                "VCC": "3.3V",
+                "GND": "GND",
+                "AOUT": "GPIO32-39 (ADC pins)"
+            },
+            "notes": "Capacitive type is more durable than resistive. Use ADC1 pins.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=capacitive+soil+moisture+sensor",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=capacitive+soil+moisture+sensor"
+            }
+        },
+        {
+            "id": "pir_motion",
+            "name": "HC-SR501 PIR Motion Sensor",
+            "type": "Motion Detection",
+            "interface": "Digital",
+            "library": "None (digitalRead)",
+            "price_estimate": "$1-3",
+            "wiring": {
+                "VCC": "5V",
+                "GND": "GND",
+                "OUT": "Any GPIO"
+            },
+            "notes": "Adjustable sensitivity and delay. Output is HIGH when motion detected.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=HC-SR501+PIR+sensor",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=HC-SR501+PIR+motion"
+            }
+        },
+        {
+            "id": "ultrasonic",
+            "name": "HC-SR04 Ultrasonic Sensor",
+            "type": "Distance Measurement",
+            "interface": "Digital (Trigger/Echo)",
+            "library": "NewPing or built-in",
+            "price_estimate": "$2-4",
+            "wiring": {
+                "VCC": "5V",
+                "GND": "GND",
+                "TRIG": "Any GPIO",
+                "ECHO": "Any GPIO (use voltage divider for 3.3V)"
+            },
+            "notes": "Range: 2cm-400cm. Echo pin outputs 5V, use voltage divider.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=HC-SR04+ultrasonic+sensor",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=HC-SR04+ultrasonic"
+            }
         }
     ],
     "displays": [
         {
             "id": "ssd1306",
-            "name": "SSD1306 OLED",
-            "type": "OLED Display 0.96\"",
+            "name": "SSD1306 OLED 0.96\"",
+            "type": "OLED Display",
             "interface": "I2C",
             "library": "Adafruit SSD1306 + GFX",
+            "price_estimate": "$3-8",
             "wiring": {
                 "VCC": "3.3V",
                 "GND": "GND",
                 "SDA": "GPIO21",
                 "SCL": "GPIO22"
             },
-            "notes": "128x64 pixels, I2C address: 0x3C or 0x3D"
+            "notes": "128x64 pixels, I2C address: 0x3C or 0x3D",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=SSD1306+OLED+0.96",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=SSD1306+OLED+0.96"
+            }
+        },
+        {
+            "id": "lcd1602_i2c",
+            "name": "LCD 16x2 with I2C",
+            "type": "LCD Display",
+            "interface": "I2C",
+            "library": "LiquidCrystal_I2C",
+            "price_estimate": "$3-6",
+            "wiring": {
+                "VCC": "5V",
+                "GND": "GND",
+                "SDA": "GPIO21",
+                "SCL": "GPIO22"
+            },
+            "notes": "I2C backpack simplifies wiring. Address usually 0x27 or 0x3F",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=LCD+1602+I2C+module",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=LCD+1602+I2C"
+            }
+        },
+        {
+            "id": "tft_st7789",
+            "name": "TFT Display ST7789 1.3\"",
+            "type": "Color TFT Display",
+            "interface": "SPI",
+            "library": "TFT_eSPI or Adafruit ST7789",
+            "price_estimate": "$5-10",
+            "wiring": {
+                "VCC": "3.3V",
+                "GND": "GND",
+                "SCL": "GPIO18",
+                "SDA": "GPIO23",
+                "RES": "GPIO4",
+                "DC": "GPIO2",
+                "CS": "GPIO15"
+            },
+            "notes": "240x240 pixels, full color. Fast SPI interface.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=ST7789+TFT+display+1.3",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=ST7789+TFT+1.3"
+            }
         }
     ],
     "actuators": [
         {
             "id": "relay",
-            "name": "Relay Module",
+            "name": "Relay Module (1 Channel)",
             "type": "Switching",
             "interface": "Digital GPIO",
             "library": "None (digitalWrite)",
+            "price_estimate": "$1-3",
             "wiring": {
                 "VCC": "5V",
                 "GND": "GND",
-                "IN": "GPIO"
+                "IN": "Any GPIO"
             },
-            "notes": "Use optocoupled relay for safety. Active LOW common."
+            "notes": "Use optocoupled relay for safety. Active LOW common.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=relay+module+5V+optocoupler",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=relay+module+5V+optocoupler"
+            }
+        },
+        {
+            "id": "relay_4ch",
+            "name": "Relay Module (4 Channel)",
+            "type": "Switching",
+            "interface": "Digital GPIO",
+            "library": "None (digitalWrite)",
+            "price_estimate": "$4-8",
+            "wiring": {
+                "VCC": "5V",
+                "GND": "GND",
+                "IN1-IN4": "Any GPIO"
+            },
+            "notes": "4 independent relays. Optocoupled recommended.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=4+channel+relay+module+5V",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=4+channel+relay+module"
+            }
+        },
+        {
+            "id": "servo_sg90",
+            "name": "SG90 Micro Servo",
+            "type": "Servo Motor",
+            "interface": "PWM",
+            "library": "ESP32Servo",
+            "price_estimate": "$2-4",
+            "wiring": {
+                "VCC": "5V (external recommended)",
+                "GND": "GND",
+                "Signal": "Any PWM GPIO"
+            },
+            "notes": "180° rotation. Use external 5V supply for multiple servos.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=SG90+micro+servo",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=SG90+micro+servo"
+            }
+        },
+        {
+            "id": "water_pump",
+            "name": "Mini Water Pump DC 3-6V",
+            "type": "Water Pump",
+            "interface": "Via Relay/MOSFET",
+            "library": "None",
+            "price_estimate": "$2-5",
+            "wiring": {
+                "VCC": "3-6V (via relay)",
+                "GND": "GND"
+            },
+            "notes": "Control via relay or MOSFET. Add flyback diode for protection.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=mini+water+pump+DC+3V+6V",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=mini+water+pump+DC"
+            }
+        },
+        {
+            "id": "buzzer",
+            "name": "Active Buzzer Module",
+            "type": "Audio Output",
+            "interface": "Digital GPIO",
+            "library": "None (digitalWrite)",
+            "price_estimate": "$0.50-2",
+            "wiring": {
+                "VCC": "3.3V or 5V",
+                "GND": "GND",
+                "I/O": "Any GPIO"
+            },
+            "notes": "Active buzzer - just apply voltage. Passive needs PWM for tone.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=active+buzzer+module",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=active+buzzer+module"
+            }
+        },
+        {
+            "id": "led_strip",
+            "name": "WS2812B LED Strip (NeoPixel)",
+            "type": "RGB LED Strip",
+            "interface": "Digital (Data)",
+            "library": "FastLED or Adafruit NeoPixel",
+            "price_estimate": "$5-15",
+            "wiring": {
+                "VCC": "5V (external supply for long strips)",
+                "GND": "GND",
+                "DIN": "Any GPIO (through 330Ω resistor)"
+            },
+            "notes": "Addressable RGB. Use capacitor (1000µF) for power supply.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=WS2812B+LED+strip",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=WS2812B+LED+strip"
+            }
         }
     ],
-    "analog": [
+    "boards": [
         {
-            "id": "analog_sensor",
-            "name": "Generic Analog Sensor",
-            "type": "Analog Input",
-            "interface": "ADC",
-            "library": "None (analogRead)",
-            "wiring": {
-                "VCC": "3.3V",
-                "GND": "GND",
-                "OUT": "GPIO32-39 (ADC pins)"
-            },
-            "notes": "ESP32 ADC is 12-bit (0-4095). Use ADC1 pins for WiFi compatibility."
+            "id": "esp32_devkit",
+            "name": "ESP32 DevKit V1",
+            "type": "Development Board",
+            "interface": "USB",
+            "library": "ESP32 Arduino Core",
+            "price_estimate": "$5-10",
+            "wiring": {},
+            "notes": "Most common ESP32 board. 30 or 38 pin versions available.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=ESP32+DevKit+V1",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=ESP32+DevKit+V1"
+            }
+        },
+        {
+            "id": "breadboard",
+            "name": "Breadboard 830 Points",
+            "type": "Prototyping",
+            "interface": "N/A",
+            "library": "N/A",
+            "price_estimate": "$2-5",
+            "wiring": {},
+            "notes": "Standard solderless breadboard for prototyping.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=breadboard+830+points",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=breadboard+830+points"
+            }
+        },
+        {
+            "id": "jumper_wires",
+            "name": "Jumper Wires Kit (M-M, M-F, F-F)",
+            "type": "Wiring",
+            "interface": "N/A",
+            "library": "N/A",
+            "price_estimate": "$3-6",
+            "wiring": {},
+            "notes": "Essential for breadboard prototyping.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=jumper+wires+kit+dupont",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=jumper+wires+kit+dupont"
+            }
+        },
+        {
+            "id": "resistor_kit",
+            "name": "Resistor Kit (Various Values)",
+            "type": "Components",
+            "interface": "N/A",
+            "library": "N/A",
+            "price_estimate": "$3-8",
+            "wiring": {},
+            "notes": "Common values: 220Ω, 330Ω, 1K, 4.7K, 10K needed for pull-ups/LEDs.",
+            "shopping_links": {
+                "amazon": "https://www.amazon.com/s?k=resistor+assortment+kit",
+                "aliexpress": "https://www.aliexpress.com/wholesale?SearchText=resistor+assortment+kit"
+            }
         }
     ]
 }
 
-# ================== LLM HELPER ==================
+# ================== LLM PROVIDERS ==================
 
-async def generate_llm_response(project: dict, stage: ProjectStage, user_message: Optional[str] = None) -> str:
-    """Generate LLM response for a specific stage"""
+async def call_groq_api(messages: List[dict], model: str, api_key: str) -> str:
+    """Call Groq API directly"""
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": model,
+                "messages": messages,
+                "max_tokens": 4096,
+                "temperature": 0.7
+            },
+            timeout=120.0
+        )
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"Groq API error: {response.text}")
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+async def call_openrouter_api(messages: List[dict], model: str, api_key: str) -> str:
+    """Call OpenRouter API"""
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://esp32-copilot.app",
+                "X-Title": "ESP32 IoT Copilot"
+            },
+            json={
+                "model": model,
+                "messages": messages,
+                "max_tokens": 4096,
+                "temperature": 0.7
+            },
+            timeout=120.0
+        )
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"OpenRouter API error: {response.text}")
+        data = response.json()
+        return data["choices"][0]["message"]["content"]
+
+async def call_emergent_api(messages: List[dict], model: str = "gpt-4o") -> str:
+    """Call OpenAI via Emergent integration"""
     from emergentintegrations.llm.chat import LlmChat, UserMessage
     
     api_key = os.environ.get('EMERGENT_LLM_KEY')
     if not api_key:
-        raise HTTPException(status_code=500, detail="LLM API key not configured")
+        raise HTTPException(status_code=500, detail="Emergent LLM API key not configured")
     
-    # Build system message based on stage
+    # Extract system message and user messages
+    system_msg = next((m["content"] for m in messages if m["role"] == "system"), "You are a helpful assistant.")
+    user_content = "\n\n".join(m["content"] for m in messages if m["role"] == "user")
+    
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=f"esp32-{uuid.uuid4()}",
+        system_message=system_msg
+    ).with_model("openai", model)
+    
+    user_msg = UserMessage(text=user_content)
+    response = await chat.send_message(user_msg)
+    return response
+
+# ================== LLM HELPER ==================
+
+def get_system_prompt(stage: ProjectStage, hardware_library: dict) -> str:
+    """Get system prompt for each stage"""
     system_prompts = {
         ProjectStage.REQUIREMENTS: """You are an ESP32 IoT project expert. Analyze the user's project idea and extract clear, structured requirements.
 Output format:
@@ -255,7 +578,7 @@ Be specific to ESP32 capabilities. Keep it practical and achievable.""",
         ProjectStage.HARDWARE: f"""You are an ESP32 hardware expert. Based on the project requirements, recommend specific hardware components and provide wiring guidance.
 
 Available hardware library:
-{json.dumps(HARDWARE_LIBRARY, indent=2)}
+{json.dumps(hardware_library, indent=2)}
 
 Output format:
 ## Recommended Components
@@ -359,7 +682,19 @@ Be specific and provide code snippets where helpful. Consider:
 - Bug fixes"""
     }
     
-    system_message = system_prompts.get(stage, "You are an ESP32 IoT expert assistant.")
+    return system_prompts.get(stage, "You are an ESP32 IoT expert assistant.")
+
+async def generate_llm_response(
+    project: dict, 
+    stage: ProjectStage, 
+    user_message: Optional[str] = None,
+    provider: LLMProvider = LLMProvider.OPENAI,
+    model: Optional[str] = None,
+    api_key: Optional[str] = None
+) -> str:
+    """Generate LLM response for a specific stage"""
+    
+    system_message = get_system_prompt(stage, HARDWARE_LIBRARY)
     
     # Build context from project
     context_parts = [f"Project: {project['name']}", f"Idea: {project['idea']}"]
@@ -380,29 +715,39 @@ Be specific and provide code snippets where helpful. Consider:
     
     context = "\n".join(context_parts)
     
-    # Create chat instance
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=f"esp32-{project['id']}-{stage.value}",
-        system_message=system_message
-    ).with_model("openai", "gpt-4o")
-    
     # Build user message
     if user_message:
         full_message = f"Project Context:\n{context}\n\nUser Request: {user_message}"
     else:
         full_message = f"Project Context:\n{context}\n\nPlease generate the {stage.value} for this project."
     
-    user_msg = UserMessage(text=full_message)
-    response = await chat.send_message(user_msg)
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": full_message}
+    ]
     
-    return response
+    # Route to appropriate provider
+    if provider == LLMProvider.GROQ:
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Groq API key required")
+        model = model or "llama-3.1-70b-versatile"
+        return await call_groq_api(messages, model, api_key)
+    
+    elif provider == LLMProvider.OPENROUTER:
+        if not api_key:
+            raise HTTPException(status_code=400, detail="OpenRouter API key required")
+        model = model or "anthropic/claude-3.5-sonnet"
+        return await call_openrouter_api(messages, model, api_key)
+    
+    else:  # Default to OpenAI via Emergent
+        model = model or "gpt-4o"
+        return await call_emergent_api(messages, model)
 
 # ================== ROUTES ==================
 
 @api_router.get("/")
 async def root():
-    return {"message": "ESP32 IoT Copilot API", "version": "1.0.0"}
+    return {"message": "ESP32 IoT Copilot API", "version": "1.1.0"}
 
 @api_router.get("/health")
 async def health():
@@ -504,7 +849,14 @@ async def generate_stage_content(project_id: str, request: LLMRequest):
         raise HTTPException(status_code=404, detail="Project not found")
     
     try:
-        content = await generate_llm_response(project, request.stage, request.user_message)
+        content = await generate_llm_response(
+            project, 
+            request.stage, 
+            request.user_message,
+            request.provider,
+            request.model,
+            request.api_key
+        )
         
         # Update project with generated content
         stages = project.get("stages", {})
@@ -540,6 +892,129 @@ async def generate_stage_content(project_id: str, request: LLMRequest):
 @api_router.get("/hardware")
 async def get_hardware_library():
     return HARDWARE_LIBRARY
+
+# Shopping List Generator
+@api_router.post("/shopping-list")
+async def generate_shopping_list(request: ShoppingListRequest):
+    """Generate a shopping list with links for selected components"""
+    all_components = []
+    for category in HARDWARE_LIBRARY.values():
+        all_components.extend(category)
+    
+    selected = []
+    total_min = 0
+    total_max = 0
+    
+    for comp_id in request.component_ids:
+        component = next((c for c in all_components if c["id"] == comp_id), None)
+        if component:
+            # Parse price estimate
+            price_str = component.get("price_estimate", "$0")
+            prices = price_str.replace("$", "").split("-")
+            min_price = float(prices[0]) if prices[0] else 0
+            max_price = float(prices[1]) if len(prices) > 1 else min_price
+            
+            selected.append({
+                "id": component["id"],
+                "name": component["name"],
+                "type": component["type"],
+                "price_estimate": component.get("price_estimate", "N/A"),
+                "shopping_links": component.get("shopping_links", {}),
+                "notes": component.get("notes", "")
+            })
+            total_min += min_price
+            total_max += max_price
+    
+    return {
+        "components": selected,
+        "total_estimate": f"${total_min:.0f}-${total_max:.0f}",
+        "component_count": len(selected)
+    }
+
+# Project Export
+@api_router.get("/projects/{project_id}/export/markdown")
+async def export_project_markdown(project_id: str):
+    """Export project as markdown document"""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    md_lines = [
+        f"# {project['name']}",
+        "",
+        f"**Created:** {project.get('created_at', 'N/A')}",
+        f"**Hardware:** {project.get('target_hardware', 'ESP32')}",
+        f"**Status:** {project.get('status', 'active')}",
+        "",
+        "---",
+        "",
+        "## Project Idea",
+        "",
+        project.get('idea', ''),
+        ""
+    ]
+    
+    if project.get('description'):
+        md_lines.extend([
+            "## Description",
+            "",
+            project['description'],
+            ""
+        ])
+    
+    stage_titles = {
+        "idea": "Idea",
+        "requirements": "Requirements",
+        "hardware": "Hardware Selection & Wiring",
+        "architecture": "Firmware Architecture",
+        "code": "Generated Code",
+        "explanation": "Code Explanation",
+        "iteration": "Iterations & Improvements"
+    }
+    
+    stages = project.get('stages', {})
+    for stage_key, title in stage_titles.items():
+        stage_data = stages.get(stage_key, {})
+        if stage_data.get('content') and stage_key != 'idea':
+            md_lines.extend([
+                "---",
+                "",
+                f"## {title}",
+                "",
+                stage_data['content'],
+                ""
+            ])
+            if stage_data.get('notes'):
+                md_lines.extend([
+                    "**Notes:**",
+                    stage_data['notes'],
+                    ""
+                ])
+    
+    markdown_content = "\n".join(md_lines)
+    
+    return Response(
+        content=markdown_content,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f'attachment; filename="{project["name"].replace(" ", "_")}_export.md"'
+        }
+    )
+
+@api_router.get("/projects/{project_id}/export/json")
+async def export_project_json(project_id: str):
+    """Export project as JSON"""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return Response(
+        content=json.dumps(project, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{project["name"].replace(" ", "_")}_export.json"'
+        }
+    )
 
 # Include the router in the main app
 app.include_router(api_router)
