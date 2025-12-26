@@ -117,6 +117,119 @@ class LLMRequest(BaseModel):
 class ShoppingListRequest(BaseModel):
     component_ids: List[str]
 
+class WiringDiagramRequest(BaseModel):
+    component_ids: List[str]
+
+class DebugRequest(BaseModel):
+    project_id: str
+    error_type: str  # compilation, runtime, hardware, power
+    log_content: str
+    provider: LLMProvider = LLMProvider.OPENAI
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+
+# ================== ESP32 PIN MAPPING ==================
+
+ESP32_PIN_MAP = {
+    "i2c": {
+        "SDA": "GPIO21",
+        "SCL": "GPIO22"
+    },
+    "spi_vspi": {
+        "MOSI": "GPIO23",
+        "MISO": "GPIO19",
+        "SCK": "GPIO18",
+        "CS": "GPIO5"
+    },
+    "spi_hspi": {
+        "MOSI": "GPIO13",
+        "MISO": "GPIO12",
+        "SCK": "GPIO14",
+        "CS": "GPIO15"
+    },
+    "uart": {
+        "TX": "GPIO1",
+        "RX": "GPIO3"
+    },
+    "adc1": ["GPIO32", "GPIO33", "GPIO34", "GPIO35", "GPIO36", "GPIO39"],
+    "adc2": ["GPIO0", "GPIO2", "GPIO4", "GPIO12", "GPIO13", "GPIO14", "GPIO15", "GPIO25", "GPIO26", "GPIO27"],
+    "dac": ["GPIO25", "GPIO26"],
+    "touch": ["GPIO0", "GPIO2", "GPIO4", "GPIO12", "GPIO13", "GPIO14", "GPIO15", "GPIO27", "GPIO32", "GPIO33"],
+    "pwm": ["GPIO2", "GPIO4", "GPIO5", "GPIO12", "GPIO13", "GPIO14", "GPIO15", "GPIO16", "GPIO17", "GPIO18", "GPIO19", "GPIO21", "GPIO22", "GPIO23", "GPIO25", "GPIO26", "GPIO27", "GPIO32", "GPIO33"],
+    "digital_recommended": ["GPIO4", "GPIO5", "GPIO16", "GPIO17", "GPIO18", "GPIO19", "GPIO23", "GPIO25", "GPIO26", "GPIO27", "GPIO32", "GPIO33"]
+}
+
+# ================== PROJECT TEMPLATES ==================
+
+PROJECT_TEMPLATES = [
+    {
+        "id": "temperature_logger",
+        "name": "Temperature Logger",
+        "description": "Log temperature and humidity to Serial and optionally MQTT",
+        "icon": "thermometer",
+        "difficulty": "beginner",
+        "components": ["esp32_devkit", "bme280", "breadboard", "jumper_wires"],
+        "idea": "Build a temperature and humidity logger using BME280 sensor that outputs readings to Serial monitor every 5 seconds. Include WiFi connectivity for optional MQTT publishing to a home automation system.",
+        "features": ["I2C sensor reading", "Serial output", "WiFi connectivity", "MQTT publishing"],
+        "learning_topics": ["I2C protocol", "Sensor libraries", "WiFi configuration", "MQTT basics"]
+    },
+    {
+        "id": "oled_sensor_display",
+        "name": "OLED Sensor Display",
+        "description": "Display real-time sensor data on an OLED screen",
+        "icon": "monitor",
+        "difficulty": "beginner",
+        "components": ["esp32_devkit", "ssd1306", "dht22", "breadboard", "jumper_wires", "resistor_kit"],
+        "idea": "Create a standalone sensor display unit using DHT22 temperature/humidity sensor and SSD1306 OLED display. Show current readings, min/max values, and a simple graph of recent measurements.",
+        "features": ["I2C display", "DHT sensor reading", "Data visualization", "Min/max tracking"],
+        "learning_topics": ["Multiple I2C devices", "Display graphics", "Data structures", "Non-blocking code"]
+    },
+    {
+        "id": "relay_controller",
+        "name": "Smart Relay Controller",
+        "description": "Control a relay via button, timer, or web interface",
+        "icon": "zap",
+        "difficulty": "intermediate",
+        "components": ["esp32_devkit", "relay", "breadboard", "jumper_wires"],
+        "idea": "Build a smart relay controller with multiple control modes: physical button, timer-based scheduling, and web interface. Include safety features like maximum on-time and state persistence across reboots.",
+        "features": ["GPIO control", "Web server", "Timer scheduling", "EEPROM persistence"],
+        "learning_topics": ["Relay safety", "Web server basics", "State machines", "EEPROM/Preferences"]
+    },
+    {
+        "id": "battery_sensor_node",
+        "name": "Battery-Powered Sensor Node",
+        "description": "Low-power sensor that wakes periodically to send data",
+        "icon": "battery",
+        "difficulty": "intermediate",
+        "components": ["esp32_devkit", "ds18b20", "breadboard", "jumper_wires", "resistor_kit"],
+        "idea": "Design a battery-optimized sensor node using DS18B20 temperature sensor. Implement deep sleep mode, wake every 15 minutes to read sensor and send data via WiFi, then return to sleep. Target battery life of 6+ months on 2xAA batteries.",
+        "features": ["Deep sleep", "OneWire sensor", "WiFi transmission", "Power optimization"],
+        "learning_topics": ["Power management", "Deep sleep modes", "Wake sources", "Current measurement"]
+    },
+    {
+        "id": "motion_alarm",
+        "name": "Motion Detection Alarm",
+        "description": "PIR-based motion detector with buzzer alert and notifications",
+        "icon": "alert-triangle",
+        "difficulty": "beginner",
+        "components": ["esp32_devkit", "pir_motion", "buzzer", "led_strip", "breadboard", "jumper_wires"],
+        "idea": "Create a motion detection alarm system using HC-SR501 PIR sensor. When motion is detected, activate a buzzer, flash LED strip, and optionally send a notification via WiFi. Include arm/disarm functionality via button or web interface.",
+        "features": ["PIR sensing", "Audio alert", "LED indication", "WiFi notifications"],
+        "learning_topics": ["Interrupt handling", "Debouncing", "HTTP requests", "State management"]
+    },
+    {
+        "id": "plant_monitor",
+        "name": "Smart Plant Monitor",
+        "description": "Monitor soil moisture, light, and environmental conditions",
+        "icon": "leaf",
+        "difficulty": "intermediate",
+        "components": ["esp32_devkit", "soil_moisture", "dht22", "ssd1306", "relay", "water_pump", "breadboard", "jumper_wires", "resistor_kit"],
+        "idea": "Build an automated plant care system that monitors soil moisture, temperature, and humidity. Display readings on OLED screen. Automatically water plants when soil is dry using a relay-controlled pump. Include configurable thresholds and manual override.",
+        "features": ["Analog sensor reading", "Automatic watering", "Threshold configuration", "Manual override"],
+        "learning_topics": ["ADC calibration", "Hysteresis", "Pump control safety", "Multi-sensor systems"]
+    }
+]
+
 # ================== HARDWARE LIBRARY WITH SHOPPING LINKS ==================
 
 HARDWARE_LIBRARY = {
