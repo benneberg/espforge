@@ -100,5 +100,8 @@ Project {
 - `PATCH /api/projects/:id` - Update project
 - `DELETE /api/projects/:id` - Delete project
 - `POST /api/projects/:id/stages/:stage/approve` - Approve stage
-- `POST /api/projects/:id/generate` - Generate stage content
+- `POST /api/projects/:id/generate` - Generate stage content (supports provider/model/api_key)
+- `GET /api/projects/:id/export/markdown` - Export project as Markdown
+- `GET /api/projects/:id/export/json` - Export project as JSON
 - `GET /api/hardware` - Get hardware library
+- `POST /api/shopping-list` - Generate shopping list with links
